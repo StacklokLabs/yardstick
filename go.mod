@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/modelcontextprotocol/go-sdk v0.1.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.10.0
 )
 
 require (
