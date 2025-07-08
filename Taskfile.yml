@@ -1,0 +1,94 @@
+version: '3'
+
+vars:
+  BINARY_NAME: yardstick
+  BUILD_DIR: build
+  MAIN_PACKAGE: ./cmd/server
+  CLIENT_PACKAGE: ./cmd/client
+  CLIENT_BINARY_NAME: yardstick-client
+
+tasks:
+  default:
+    desc: Run tests and build the application
+    deps: [test, build]
+
+  build:
+    desc: Build the application
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE}}
+      - go build -o {{.BUILD_DIR}}/{{.CLIENT_BINARY_NAME}} {{.CLIENT_PACKAGE}}
+
+  run:
+    desc: Run the application with stdio transport
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} --transport stdio
+
+  run-sse:
+    desc: Run the application with SSE transport
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} --transport sse
+
+  run-streamable-http:
+    desc: Run the application with Streamable HTTP transport
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} --transport streamable-http
+
+  lint:
+    desc: Run linting tools
+    cmds:
+      - golangci-lint run ./...
+      - go vet ./...
+
+  lint-fix:
+    desc: Run linting tools, and apply fixes.
+    cmds:
+      - golangci-lint run --fix ./...
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v -cover ./...
+
+  test-integration:
+    desc: Run integration tests
+    cmds:
+      - ./test/integration-test.sh
+
+  clean:
+    desc: Clean the build directory
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+
+  fmt:
+    desc: Format the code
+    cmds:
+      - go fmt ./...
+      - golangci-lint run --fix
+
+  deps:
+    desc: Update dependencies
+    cmds:
+      - go mod tidy
+
+  install:
+    desc: Install dependencies
+    cmds:
+      - go mod download
+
+  build-image:
+    desc: Build the image locally with ko
+    env:
+      KO_DOCKER_REPO: ghcr.io/stackloklabs/yardstick/server
+      VERSION: dev-local
+    cmds:
+      - |
+        if [[ $(uname -m) == "arm64" ]]; then
+          PLATFORM="linux/arm64"
+        else
+          PLATFORM="linux/amd64"
+        fi
+        ko build ./cmd/server --bare --local --platform=$PLATFORM

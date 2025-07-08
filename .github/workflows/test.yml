@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      # TODO: Uncomment this when we have fixed the ability to run the
+      # integration tests on the github actions runner.
+      # - name: Setup Ko
+      #   uses: ko-build/setup-ko@v0.9
+
+      # TODO: Uncomment this when we have fixed the ability to run the
+      # integration tests on the github actions runner.
+      # - name: Set up Docker
+      #   uses: docker/setup-docker-action@v4
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: '3.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test
+        run: task test
+
+      # TODO: Uncomment this when we have fixed the ability to run the
+      # integration tests on the github actions runner.
+      # - name: Test
+      #   run: task test-integration
