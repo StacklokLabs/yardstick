@@ -14,7 +14,7 @@ An MCP Server and Client that provides a yardstick implementation and reference 
   - **Full Transport Coverage**: Supports running in all three transport types (`stdio`,`sse` and `streamable-http`)
   - **Deterministic response**: Provides the ability for deterministic testing, ensuring each response is tied to its specific request
   - **Securely built**: Secure and minimal OCI Image that does not require elevated privileges to run
-- [Client](./cmd/client/README.md)
+- [Client](./cmd/yardstick-client/README.md)
   - **Full Transport Coverage**: Supports running against all types of MCP Servers (`stdio`,`sse` and `streamable-http`)
   - **Support for Containers**: Containerised MCP Servers are supported (and preferred)
 
