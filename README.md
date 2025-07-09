@@ -10,7 +10,7 @@
 An MCP Server and Client that provides a yardstick implementation and reference for testing. </span>
 
 ## Features
-- [Server](./cmd/server/README.md)
+- [Server](./cmd/yardstick-server/README.md)
   - **Full Transport Coverage**: Supports running in all three transport types (`stdio`,`sse` and `streamable-http`)
   - **Deterministic response**: Provides the ability for deterministic testing, ensuring each response is tied to its specific request
   - **Securely built**: Secure and minimal OCI Image that does not require elevated privileges to run

@@ -3,8 +3,8 @@ version: '3'
 vars:
   BINARY_NAME: yardstick
   BUILD_DIR: build
-  MAIN_PACKAGE: ./cmd/server
-  CLIENT_PACKAGE: ./cmd/client
+  MAIN_PACKAGE: ./cmd/yardstick-server
+  CLIENT_PACKAGE: ./cmd/yardstick-client
   CLIENT_BINARY_NAME: yardstick-client
 
 tasks:
@@ -77,7 +77,8 @@ tasks:
   install:
     desc: Install dependencies
     cmds:
-      - go mod download
+      - go install -v ./cmd/yardstick-server
+      - go install -v ./cmd/yardstick-client
 
   build-image:
     desc: Build the image locally with ko
@@ -91,4 +92,4 @@ tasks:
         else
           PLATFORM="linux/amd64"
         fi
-        ko build ./cmd/server --bare --local --platform=$PLATFORM
+        ko build ./cmd/yardstick-server --bare --local --platform=$PLATFORM
