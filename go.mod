@@ -3,7 +3,7 @@ module github.com/stackloklabs/yardstick
 go 1.24.0
 
 require (
-	github.com/modelcontextprotocol/go-sdk v0.1.0
+	github.com/modelcontextprotocol/go-sdk v0.8.0
 	github.com/stretchr/testify v1.11.1
 )
 
