@@ -162,24 +162,22 @@ func TestEndToEndEchoFunctionality(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			params := &mcp.CallToolParamsFor[EchoRequest]{
-				Arguments: EchoRequest{Input: tc.input},
-			}
+			// Create a CallToolRequest for testing
+			req := &mcp.CallToolRequest{}
+			params := EchoRequest{Input: tc.input}
 
-			result, err := echoHandler(ctx, nil, params)
+			result, response, err := echoHandler(ctx, req, params)
 
 			if tc.expectedError {
-				assert.Error(t, err)
-				assert.Nil(t, result)
-			} else {
+				// For invalid input, we expect an error result, not an error
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
-				assert.Len(t, result.Content, 1)
-
-				// Check that the content is TextContent
-				textContent, ok := result.Content[0].(*mcp.TextContent)
-				assert.True(t, ok)
-				assert.Equal(t, tc.input, textContent.Text)
+				assert.True(t, result.IsError)
+			} else {
+				assert.NoError(t, err)
+				assert.Nil(t, result) // When successful, result is nil and response contains the data
+				assert.NotNil(t, response)
+				assert.Equal(t, tc.input, response.Output)
 			}
 		})
 	}
@@ -203,13 +201,13 @@ func TestServerStartup(t *testing.T) {
 			assert.False(t, validateAlphanumeric("test@123"))
 
 			// Verify echo handler works
-			params := &mcp.CallToolParamsFor[EchoRequest]{
-				Arguments: EchoRequest{Input: "test123"},
-			}
+			req := &mcp.CallToolRequest{}
+			params := EchoRequest{Input: "test123"}
 
-			result, err := echoHandler(context.Background(), nil, params)
+			result, response, err := echoHandler(context.Background(), req, params)
 			assert.NoError(t, err)
-			assert.NotNil(t, result)
+			assert.Nil(t, result)
+			assert.NotNil(t, response)
 		})
 	}
 }
@@ -225,30 +223,23 @@ func TestConcurrentEchoRequests(t *testing.T) {
 
 	for i := 0; i < numConcurrentRequests; i++ {
 		go func(id int) {
-			params := &mcp.CallToolParamsFor[EchoRequest]{
-				Arguments: EchoRequest{Input: fmt.Sprintf("test%d", id)},
-			}
+			req := &mcp.CallToolRequest{}
+			params := EchoRequest{Input: fmt.Sprintf("test%d", id)}
 
-			result, err := echoHandler(ctx, nil, params)
+			result, response, err := echoHandler(ctx, req, params)
 			if err != nil {
 				results <- err
 				return
 			}
 
-			if result == nil || len(result.Content) == 0 {
-				results <- fmt.Errorf("invalid result for request %d", id)
-				return
-			}
-
-			textContent, ok := result.Content[0].(*mcp.TextContent)
-			if !ok {
-				results <- fmt.Errorf("expected TextContent for request %d", id)
+			if result != nil {
+				results <- fmt.Errorf("expected nil result for request %d", id)
 				return
 			}
 
 			expectedOutput := fmt.Sprintf("test%d", id)
-			if textContent.Text != expectedOutput {
-				results <- fmt.Errorf("expected %s, got %s", expectedOutput, textContent.Text)
+			if response.Output != expectedOutput {
+				results <- fmt.Errorf("expected %s, got %s", expectedOutput, response.Output)
 				return
 			}
 

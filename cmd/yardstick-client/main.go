@@ -59,8 +59,11 @@ func (c *Client) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to create transport: %w", err)
 	}
 
-	c.client = mcp.NewClient("yardstick-client", "1.0.0", nil)
-	session, err := c.client.Connect(ctx, transport)
+	c.client = mcp.NewClient(&mcp.Implementation{
+		Name:    "yardstick-client",
+		Version: "1.0.0",
+	}, nil)
+	session, err := c.client.Connect(ctx, transport, nil)
 	if err != nil {
 		return err
 	}
@@ -76,7 +79,7 @@ func (c *Client) connectStdio() (mcp.Transport, error) {
 
 	// #nosec G204 - Command and args are from user configuration, this is intentional
 	cmd := exec.Command(c.config.Command, c.config.Args...)
-	return mcp.NewCommandTransport(cmd), nil
+	return &mcp.CommandTransport{Command: cmd}, nil
 }
 
 // connectSSE creates an SSE transport connection
@@ -84,7 +87,7 @@ func (c *Client) connectStdio() (mcp.Transport, error) {
 //nolint:unparam
 func (c *Client) connectSSE() (mcp.Transport, error) {
 	url := fmt.Sprintf("http://%s:%d/sse", c.config.Address, c.config.Port)
-	return mcp.NewSSEClientTransport(url, nil), nil
+	return &mcp.SSEClientTransport{Endpoint: url}, nil
 }
 
 // connectStreamableHTTP creates a streamable HTTP transport connection
@@ -92,7 +95,7 @@ func (c *Client) connectSSE() (mcp.Transport, error) {
 //nolint:unparam
 func (c *Client) connectStreamableHTTP() (mcp.Transport, error) {
 	url := fmt.Sprintf("http://%s:%d/mcp", c.config.Address, c.config.Port)
-	return mcp.NewStreamableClientTransport(url, nil), nil
+	return &mcp.StreamableClientTransport{Endpoint: url}, nil
 }
 
 // Close closes the client connection

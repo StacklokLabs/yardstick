@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/jsonschema"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -33,22 +33,19 @@ func validateAlphanumeric(input string) bool {
 	return alphanumericRegex.MatchString(input)
 }
 
-func echoHandler(_ context.Context, _ *mcp.ServerSession, params *mcp.CallToolParamsFor[EchoRequest]) (
-	*mcp.CallToolResultFor[EchoResponse], error,
-) {
-	if !validateAlphanumeric(params.Arguments.Input) {
-		return nil, fmt.Errorf("input must be alphanumeric only")
+func echoHandler(_ context.Context, req *mcp.CallToolRequest, params EchoRequest) (*mcp.CallToolResult, EchoResponse, error) {
+	if !validateAlphanumeric(params.Input) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "input must be alphanumeric only"}},
+			IsError: true,
+		}, EchoResponse{}, nil
 	}
 
 	response := EchoResponse{
-		Output: params.Arguments.Input,
+		Output: params.Input,
 	}
 
-	return &mcp.CallToolResultFor[EchoResponse]{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: response.Output},
-		},
-	}, nil
+	return nil, response, nil
 }
 
 func main() {
@@ -56,30 +53,38 @@ func main() {
 	parseConfig()
 
 	// Create MCP server
-	server := mcp.NewServer("echo-server", "1.0.0", nil)
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:    "echo-server",
+		Version: "1.0.0",
+	}, nil)
 
-	// Add echo tool to server
-	echoTool := mcp.NewServerTool("echo", "Echo back an alphanumeric string for deterministic testing", echoHandler,
-		mcp.Input(
-			mcp.Property("input",
-				mcp.Description("Alphanumeric string to echo back"),
-				mcp.Schema(&jsonschema.Schema{
-					Type:    "string",
-					Pattern: "^[a-zA-Z0-9]+$",
-				}),
-			),
-		),
-	)
+	// Create custom schema for input validation
+	inputSchema := &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"input": {
+				Type:        "string",
+				Pattern:     "^[a-zA-Z0-9]+$",
+				Description: "Alphanumeric string to echo back",
+			},
+		},
+		Required: []string{"input"},
+	}
 
-	server.AddTools(echoTool)
+	// Add echo tool to server using the new API
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "echo",
+		Description: "Echo back an alphanumeric string for deterministic testing",
+		InputSchema: inputSchema,
+	}, echoHandler)
 
 	ctx := context.Background()
 
 	switch transport {
 	case "stdio":
 		log.Println("Starting MCP server with stdio transport")
-		transport := mcp.NewStdioTransport()
-		if err := server.Run(ctx, transport); err != nil {
+		stdioTransport := &mcp.StdioTransport{}
+		if err := server.Run(ctx, stdioTransport); err != nil {
 			log.Fatal("Failed to run server:", err)
 		}
 
@@ -90,7 +95,7 @@ func main() {
 
 		handler := mcp.NewSSEHandler(func(_ *http.Request) *mcp.Server {
 			return server
-		})
+		}, nil)
 
 		// Mount the SSE handler at /sse - it will handle both GET (SSE stream) and POST (messages) requests
 		http.Handle("/sse", handler)
