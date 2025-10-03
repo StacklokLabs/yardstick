@@ -33,7 +33,7 @@ func validateAlphanumeric(input string) bool {
 	return alphanumericRegex.MatchString(input)
 }
 
-func echoHandler(_ context.Context, req *mcp.CallToolRequest, params EchoRequest) (*mcp.CallToolResult, EchoResponse, error) {
+func echoHandler(_ context.Context, _ *mcp.CallToolRequest, params EchoRequest) (*mcp.CallToolResult, EchoResponse, error) {
 	if !validateAlphanumeric(params.Input) {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "input must be alphanumeric only"}},
