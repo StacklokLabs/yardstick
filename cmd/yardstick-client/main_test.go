@@ -168,26 +168,24 @@ func createMockMCPServer(_ *testing.T, transport string) *httptest.Server {
 	mux := http.NewServeMux()
 
 	// Create a mock MCP server
-	server := mcp.NewServer("test-server", "1.0.0", nil)
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:    "test-server",
+		Version: "1.0.0",
+	}, nil)
 
 	// Add a simple echo tool for testing
-	echoTool := mcp.NewServerTool("echo", "Echo tool for testing",
-		func(_ context.Context, _ *mcp.ServerSession, _ *mcp.CallToolParamsFor[map[string]interface{}]) (*mcp.CallToolResultFor[map[string]interface{}], error) {
-			return &mcp.CallToolResultFor[map[string]interface{}]{
-				Content: []mcp.Content{
-					&mcp.TextContent{Text: "test response"},
-				},
-			}, nil
-		},
-		mcp.Input(),
-	)
-	server.AddTools(echoTool)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "echo",
+		Description: "Echo tool for testing",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, _ map[string]interface{}) (*mcp.CallToolResult, map[string]interface{}, error) {
+		return nil, map[string]interface{}{"message": "test response"}, nil
+	})
 
 	switch transport {
 	case "sse":
 		handler := mcp.NewSSEHandler(func(_ *http.Request) *mcp.Server {
 			return server
-		})
+		}, nil)
 		mux.Handle("/sse", handler)
 	case "streamable-http":
 		handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {

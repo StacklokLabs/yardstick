@@ -79,26 +79,22 @@ func TestEchoHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create request with the new API
-			echoReq := EchoRequest{Input: tt.input}
-			params := &mcp.CallToolParamsFor[EchoRequest]{
-				Arguments: echoReq,
-			}
+			req := &mcp.CallToolRequest{}
+			params := EchoRequest{Input: tt.input}
 
 			// Call handler
-			result, err := echoHandler(context.Background(), nil, params)
+			result, response, err := echoHandler(context.Background(), req, params)
 
 			if tt.expectError {
-				assert.Error(t, err)
-				assert.Nil(t, result)
-			} else {
+				// For invalid input, we expect an error result, not an error
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
-				assert.Len(t, result.Content, 1)
-
-				// Check that the content is TextContent
-				textContent, ok := result.Content[0].(*mcp.TextContent)
-				assert.True(t, ok)
-				assert.Equal(t, tt.expectedOutput, textContent.Text)
+				assert.True(t, result.IsError)
+			} else {
+				assert.NoError(t, err)
+				assert.Nil(t, result)
+				assert.NotNil(t, response)
+				assert.Equal(t, tt.expectedOutput, response.Output)
 			}
 		})
 	}
