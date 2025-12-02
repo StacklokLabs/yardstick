@@ -39,7 +39,7 @@ func TestConfig_ParseConfig(t *testing.T) {
 
 	// Save original env vars
 	originalEnvVars := map[string]string{}
-	envVars := []string{"TRANSPORT", "ADDRESS", "PORT", "COMMAND"}
+	envVars := []string{"MCP_TRANSPORT", "ADDRESS", "PORT", "COMMAND"}
 	for _, env := range envVars {
 		if val, exists := os.LookupEnv(env); exists {
 			originalEnvVars[env] = val
@@ -59,20 +59,20 @@ func TestConfig_ParseConfig(t *testing.T) {
 	// Test environment variable override
 	t.Run("environment variables", func(t *testing.T) {
 		// Set test env vars
-		os.Setenv("TRANSPORT", "streamable-http")
+		os.Setenv("MCP_TRANSPORT", "streamable-http")
 		os.Setenv("ADDRESS", "remote.example.com")
 		os.Setenv("PORT", "3000")
 		os.Setenv("COMMAND", "test-command")
 
 		defer func() {
-			os.Unsetenv("TRANSPORT")
+			os.Unsetenv("MCP_TRANSPORT")
 			os.Unsetenv("ADDRESS")
 			os.Unsetenv("PORT")
 			os.Unsetenv("COMMAND")
 		}()
 
 		// Test that env vars would be read (we can't call parseConfig due to flag redefinition)
-		transport, transportExists := os.LookupEnv("TRANSPORT")
+		transport, transportExists := os.LookupEnv("MCP_TRANSPORT")
 		assert.True(t, transportExists)
 		assert.Equal(t, "streamable-http", transport)
 

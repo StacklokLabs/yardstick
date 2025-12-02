@@ -31,8 +31,8 @@ The client connects to MCP servers using various transport mechanisms and allows
 ## Environment Variables
 
 Configuration can also be set via environment variables:
-- `TRANSPORT`: Override transport type
-- `ADDRESS`: Override server address  
+- `MCP_TRANSPORT`: Override transport type
+- `ADDRESS`: Override server address
 - `PORT`: Override server port
 - `COMMAND`: Override command for stdio transport
 
@@ -101,7 +101,7 @@ Call a specific tool with provided JSON arguments:
 
 ### Using environment variables
 ```bash
-export TRANSPORT=sse
+export MCP_TRANSPORT=sse
 export ADDRESS=remote.example.com
 export PORT=3000
 ./client -action=list-resources
