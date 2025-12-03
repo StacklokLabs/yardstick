@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -28,9 +29,31 @@ type EchoResponse struct {
 var alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 var transport string
 var port int
+var authHeader string
+var authValue string
 
 func validateAlphanumeric(input string) bool {
 	return alphanumericRegex.MatchString(input)
+}
+
+func checkAuth(r *http.Request) error {
+	if authHeader == "" {
+		return nil
+	}
+	if r.Header.Get(authHeader) != authValue {
+		return errors.New("unauthorized")
+	}
+	return nil
+}
+
+func authWrapper(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := checkAuth(r); err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func echoHandler(_ context.Context, _ *mcp.CallToolRequest, params EchoRequest) (*mcp.CallToolResult, EchoResponse, error) {
@@ -98,7 +121,7 @@ func main() {
 		}, nil)
 
 		// Mount the SSE handler at /sse - it will handle both GET (SSE stream) and POST (messages) requests
-		http.Handle("/sse", handler)
+		http.Handle("/sse", authWrapper(handler))
 
 		// Create server with timeouts to address G114 gosec issue
 		srv := &http.Server{
@@ -116,7 +139,7 @@ func main() {
 			return server
 		}, nil)
 
-		http.Handle("/mcp", handler)
+		http.Handle("/mcp", authWrapper(handler))
 
 		// Create server with timeouts to address G114 gosec issue
 		srv := &http.Server{
@@ -150,4 +173,7 @@ func parseConfig() {
 			port = intValue
 		}
 	}
+
+	authHeader = os.Getenv("AUTH_HEADER")
+	authValue = os.Getenv("AUTH_VALUE")
 }
