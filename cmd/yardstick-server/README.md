@@ -64,12 +64,12 @@ docker run -it ghcr.io/stackloklabs/yardstick/server
 
 **SSE Transport:**
 ```bash
-docker run -p 8080:8080 -e TRANSPORT=sse -e PORT=8080 ghcr.io/stackloklabs/yardstick/server
+docker run -p 8080:8080 -e MCP_TRANSPORT=sse -e PORT=8080 ghcr.io/stackloklabs/yardstick/server
 ```
 
 **Streamable HTTP Transport:**
 ```bash
-docker run -p 8080:8080 -e TRANSPORT=streamable-http -e PORT=8080 ghcr.io/stackloklabs/yardstick/server
+docker run -p 8080:8080 -e MCP_TRANSPORT=streamable-http -e PORT=8080 ghcr.io/stackloklabs/yardstick/server
 ```
 
 ## Tools
