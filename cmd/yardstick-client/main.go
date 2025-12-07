@@ -211,7 +211,7 @@ func parseConfig() Config {
 	}
 
 	// Use environment variables if provided
-	if t, ok := os.LookupEnv("TRANSPORT"); ok {
+	if t, ok := os.LookupEnv("MCP_TRANSPORT"); ok {
 		config.Transport = t
 	}
 	if a, ok := os.LookupEnv("ADDRESS"); ok {

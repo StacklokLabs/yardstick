@@ -165,7 +165,7 @@ func parseConfig() {
 	flag.Parse()
 
 	// Use environment variables if provided, otherwise use flag values
-	if t, ok := os.LookupEnv("TRANSPORT"); ok {
+	if t, ok := os.LookupEnv("MCP_TRANSPORT"); ok {
 		transport = t
 	}
 	if p, ok := os.LookupEnv("PORT"); ok {
