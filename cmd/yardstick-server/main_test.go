@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -110,4 +111,80 @@ func TestEchoResponseCreation(t *testing.T) {
 	// Test that EchoResponse struct works properly
 	response := EchoResponse{Output: "test123"}
 	assert.Equal(t, "test123", response.Output)
+}
+
+func TestCheckAuth_HeaderAuth(t *testing.T) {
+	// Save original values
+	origHeader := authHeader
+	origValue := authValue
+	defer func() {
+		authHeader = origHeader
+		authValue = origValue
+	}()
+
+	// Set auth config
+	authHeader = "X-Auth-Token"
+	authValue = "secret123"
+
+	// Create request with correct header
+	req, err := http.NewRequest(http.MethodGet, "/test", nil)
+	assert.NoError(t, err)
+	req.Header.Set("X-Auth-Token", "secret123")
+
+	// Should pass authentication
+	err = checkAuth(req)
+	assert.NoError(t, err)
+}
+
+func TestCheckAuth_HeaderAuth_Fail(t *testing.T) {
+	// Save original values
+	origHeader := authHeader
+	origValue := authValue
+	defer func() {
+		authHeader = origHeader
+		authValue = origValue
+	}()
+
+	// Set auth config
+	authHeader = "X-Auth-Token"
+	authValue = "secret123"
+
+	// Test with wrong header value
+	req, err := http.NewRequest(http.MethodGet, "/test", nil)
+	assert.NoError(t, err)
+	req.Header.Set("X-Auth-Token", "wrongvalue")
+
+	err = checkAuth(req)
+	assert.Error(t, err)
+	assert.Equal(t, "unauthorized", err.Error())
+
+	// Test with missing header
+	req2, err := http.NewRequest(http.MethodGet, "/test", nil)
+	assert.NoError(t, err)
+
+	err = checkAuth(req2)
+	assert.Error(t, err)
+	assert.Equal(t, "unauthorized", err.Error())
+}
+
+func TestCheckAuth_Disabled(t *testing.T) {
+	// Save original values
+	origHeader := authHeader
+	origValue := authValue
+	defer func() {
+		authHeader = origHeader
+		authValue = origValue
+	}()
+
+	// Auth disabled when authHeader is empty
+	authHeader = ""
+	authValue = ""
+
+	// Create request without any auth header
+	req, err := http.NewRequest(http.MethodGet, "/test", nil)
+	assert.NoError(t, err)
+
+	// Should pass since auth is disabled
+	err = checkAuth(req)
+	assert.NoError(t, err)
 }
