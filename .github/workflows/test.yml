@@ -19,15 +19,8 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      # TODO: Uncomment this when we have fixed the ability to run the
-      # integration tests on the github actions runner.
-      # - name: Setup Ko
-      #   uses: ko-build/setup-ko@v0.9
-
-      # TODO: Uncomment this when we have fixed the ability to run the
-      # integration tests on the github actions runner.
-      # - name: Set up Docker
-      #   uses: docker/setup-docker-action@v4
+      - name: Setup Ko
+        uses: ko-build/setup-ko@v0.9
 
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -38,7 +31,5 @@ jobs:
       - name: Test
         run: task test
 
-      # TODO: Uncomment this when we have fixed the ability to run the
-      # integration tests on the github actions runner.
-      # - name: Test
-      #   run: task test-integration
+      - name: Integration Test
+        run: task test-integration
