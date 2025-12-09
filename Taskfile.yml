@@ -83,7 +83,7 @@ tasks:
   build-image:
     desc: Build the image locally with ko
     env:
-      KO_DOCKER_REPO: ghcr.io/stackloklabs/yardstick/server
+      KO_DOCKER_REPO: ghcr.io/stackloklabs/yardstick
       VERSION: dev-local
     cmds:
       - |
