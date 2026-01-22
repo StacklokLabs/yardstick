@@ -65,10 +65,15 @@ func echoHandler(_ context.Context, req *mcp.CallToolRequest, params EchoRequest
 	}
 
 	if !validateAlphanumeric(params.Input) {
-		return &mcp.CallToolResult{
+		// Echo back metadata even in error cases
+		result := &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "input must be alphanumeric only"}},
 			IsError: true,
-		}, EchoResponse{}, nil
+		}
+		if len(metadata) > 0 {
+			result.Meta = metadata
+		}
+		return result, EchoResponse{}, nil
 	}
 
 	response := EchoResponse{

@@ -288,3 +288,34 @@ func TestEchoHandler_WithoutMetadata(t *testing.T) {
 	assert.NotNil(t, response)
 	assert.Equal(t, "test123", response.Output)
 }
+
+func TestEchoHandler_WithMetadata_ValidationError(t *testing.T) {
+	// Create request with metadata but invalid input
+	requestMeta := mcp.Meta{
+		"progressToken": "error-token",
+		"requestId":     "error-req-123",
+	}
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Meta: requestMeta,
+		},
+	}
+	params := EchoRequest{Input: "invalid@input!"} // Contains special characters
+
+	// Call handler
+	result, response, err := echoHandler(context.Background(), req, params)
+
+	// Verify response
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.IsError, "Expected IsError to be true for invalid input")
+	assert.NotEmpty(t, result.Content, "Expected error message in Content")
+
+	// Verify metadata is still echoed back even in error case
+	assert.NotNil(t, result.Meta, "Metadata should be echoed back even on validation error")
+	assert.Equal(t, requestMeta["progressToken"], result.Meta["progressToken"])
+	assert.Equal(t, requestMeta["requestId"], result.Meta["requestId"])
+
+	// Verify response is empty for error case
+	assert.Empty(t, response.Output)
+}
