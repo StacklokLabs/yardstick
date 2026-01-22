@@ -56,18 +56,41 @@ func authWrapper(next http.Handler) http.Handler {
 	})
 }
 
-func echoHandler(_ context.Context, _ *mcp.CallToolRequest, params EchoRequest) (*mcp.CallToolResult, EchoResponse, error) {
+func echoHandler(_ context.Context, req *mcp.CallToolRequest, params EchoRequest) (*mcp.CallToolResult, EchoResponse, error) {
+	// Extract metadata from request to echo back in response
+	var metadata mcp.Meta
+	if req.Params != nil && len(req.Params.Meta) > 0 {
+		log.Printf("echo tool called with metadata: %+v", req.Params.Meta)
+		metadata = req.Params.Meta
+	}
+
 	if !validateAlphanumeric(params.Input) {
-		return &mcp.CallToolResult{
+		// Echo back metadata even in error cases
+		result := &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "input must be alphanumeric only"}},
 			IsError: true,
-		}, EchoResponse{}, nil
+		}
+		if len(metadata) > 0 {
+			result.Meta = metadata
+		}
+		return result, EchoResponse{}, nil
 	}
 
 	response := EchoResponse{
 		Output: params.Input,
 	}
 
+	// Return result with metadata echoed back only if metadata is present
+	// When result is nil, SDK auto-populates Content from response
+	// When result is non-nil with empty Content, SDK should still auto-populate Content
+	if len(metadata) > 0 {
+		result := &mcp.CallToolResult{
+			Meta: metadata,
+		}
+		return result, response, nil
+	}
+
+	// No metadata, return nil result (original behavior)
 	return nil, response, nil
 }
 
@@ -96,8 +119,9 @@ func main() {
 
 	// Add echo tool to server using the new API
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "echo",
-		Description: "Echo back an alphanumeric string for deterministic testing",
+		Name: "echo",
+		Description: "Echo back an alphanumeric string for deterministic testing. " +
+			"Also echoes back any _meta field from the request for testing metadata propagation.",
 		InputSchema: inputSchema,
 	}, echoHandler)
 

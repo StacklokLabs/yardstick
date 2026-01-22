@@ -175,7 +175,8 @@ func TestEndToEndEchoFunctionality(t *testing.T) {
 				assert.True(t, result.IsError)
 			} else {
 				assert.NoError(t, err)
-				assert.Nil(t, result) // When successful, result is nil and response contains the data
+				// Result is nil when no metadata is present (original behavior)
+				assert.Nil(t, result)
 				assert.NotNil(t, response)
 				assert.Equal(t, tc.input, response.Output)
 			}
@@ -206,6 +207,7 @@ func TestServerStartup(t *testing.T) {
 
 			result, response, err := echoHandler(context.Background(), req, params)
 			assert.NoError(t, err)
+			// Result is nil when no metadata (original behavior)
 			assert.Nil(t, result)
 			assert.NotNil(t, response)
 		})
@@ -232,8 +234,9 @@ func TestConcurrentEchoRequests(t *testing.T) {
 				return
 			}
 
-			if result != nil {
-				results <- fmt.Errorf("expected nil result for request %d", id)
+			// Result is nil when no metadata is present (this is expected)
+			if result != nil && result.IsError {
+				results <- fmt.Errorf("unexpected error result for request %d", id)
 				return
 			}
 

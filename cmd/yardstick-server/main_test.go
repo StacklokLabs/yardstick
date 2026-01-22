@@ -93,6 +93,7 @@ func TestEchoHandler(t *testing.T) {
 				assert.True(t, result.IsError)
 			} else {
 				assert.NoError(t, err)
+				// Result is nil when no metadata is present (original behavior)
 				assert.Nil(t, result)
 				assert.NotNil(t, response)
 				assert.Equal(t, tt.expectedOutput, response.Output)
@@ -187,4 +188,134 @@ func TestCheckAuth_Disabled(t *testing.T) {
 	// Should pass since auth is disabled
 	err = checkAuth(req)
 	assert.NoError(t, err)
+}
+
+func TestEchoHandler_WithMetadata(t *testing.T) {
+	// Create request with metadata
+	requestMeta := mcp.Meta{
+		"progressToken": "test123",
+		"customKey":     "customValue",
+	}
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Meta: requestMeta,
+		},
+	}
+	params := EchoRequest{Input: "hello"}
+
+	// Call handler
+	result, response, err := echoHandler(context.Background(), req, params)
+
+	// Verify response
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.NotNil(t, response)
+	assert.Equal(t, "hello", response.Output)
+
+	// Verify metadata is echoed back
+	assert.NotNil(t, result.Meta)
+	assert.Equal(t, requestMeta["progressToken"], result.Meta["progressToken"])
+	assert.Equal(t, requestMeta["customKey"], result.Meta["customKey"])
+}
+
+func TestEchoHandler_WithMultipleMetadataFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata mcp.Meta
+	}{
+		{
+			name:     "with progressToken",
+			metadata: mcp.Meta{"progressToken": "token123"},
+		},
+		{
+			name: "with multiple fields",
+			metadata: mcp.Meta{
+				"progressToken": "token456",
+				"requestId":     "req789",
+				"clientInfo":    "test-client",
+			},
+		},
+		{
+			name:     "with nested metadata",
+			metadata: mcp.Meta{"debug": map[string]any{"level": "verbose"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create request with metadata
+			req := &mcp.CallToolRequest{
+				Params: &mcp.CallToolParamsRaw{
+					Meta: tt.metadata,
+				},
+			}
+			params := EchoRequest{Input: "test123"}
+
+			// Call handler
+			result, response, err := echoHandler(context.Background(), req, params)
+
+			// Verify response
+			assert.NoError(t, err)
+			assert.NotNil(t, result)
+			assert.NotNil(t, response)
+			assert.Equal(t, "test123", response.Output)
+
+			// Verify metadata is echoed back
+			assert.NotNil(t, result.Meta)
+			for key, expectedValue := range tt.metadata {
+				actualValue, exists := result.Meta[key]
+				assert.True(t, exists, "Expected metadata key %s to exist", key)
+				assert.Equal(t, expectedValue, actualValue, "Metadata value mismatch for key %s", key)
+			}
+		})
+	}
+}
+
+func TestEchoHandler_WithoutMetadata(t *testing.T) {
+	// Create request without metadata
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{},
+	}
+	params := EchoRequest{Input: "test123"}
+
+	// Call handler
+	result, response, err := echoHandler(context.Background(), req, params)
+
+	// Verify response
+	assert.NoError(t, err)
+	// Result should be nil when no metadata is present (original behavior)
+	assert.Nil(t, result)
+	assert.NotNil(t, response)
+	assert.Equal(t, "test123", response.Output)
+}
+
+func TestEchoHandler_WithMetadata_ValidationError(t *testing.T) {
+	// Create request with metadata but invalid input
+	requestMeta := mcp.Meta{
+		"progressToken": "error-token",
+		"requestId":     "error-req-123",
+	}
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Meta: requestMeta,
+		},
+	}
+	params := EchoRequest{Input: "invalid@input!"} // Contains special characters
+
+	// Call handler
+	result, response, err := echoHandler(context.Background(), req, params)
+
+	// Verify response
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.IsError, "Expected IsError to be true for invalid input")
+	assert.NotEmpty(t, result.Content, "Expected error message in Content")
+
+	// Verify metadata is still echoed back even in error case
+	assert.NotNil(t, result.Meta, "Metadata should be echoed back even on validation error")
+	assert.Equal(t, requestMeta["progressToken"], result.Meta["progressToken"])
+	assert.Equal(t, requestMeta["requestId"], result.Meta["requestId"])
+
+	// Verify response is empty for error case
+	assert.Empty(t, response.Output)
 }
