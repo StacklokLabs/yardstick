@@ -27,7 +27,7 @@ else
 fi
 
 # Get the image name from ko build output
-IMAGE_NAME="ghcr.io/stackloklabs/yardstick/server:latest"
+IMAGE_NAME="ghcr.io/stackloklabs/yardstick:latest"
 
 ###################################################################
 ################## START - STDIO TRANSPORT TESTING ################
