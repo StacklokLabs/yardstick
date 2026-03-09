@@ -285,6 +285,6 @@ func main() {
 		}
 
 	default:
-		log.Fatalf("Unknown action: %s", action)
+		log.Fatalf("Unknown action: %s", strconv.Quote(action))
 	}
 }
