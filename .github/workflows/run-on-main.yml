@@ -2,6 +2,7 @@
 name: Main build
 permissions:
   contents: read
+  security-events: write
 
 on:
   workflow_dispatch:
@@ -9,6 +10,9 @@ on:
     branches: [ main ]
 
 jobs:
+  security:
+    name: Security Scan
+    uses: ./.github/workflows/security.yml
   linting:
     name: Linting
     uses: ./.github/workflows/lint.yml

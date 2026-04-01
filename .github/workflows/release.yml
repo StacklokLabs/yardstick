@@ -5,8 +5,17 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
+  security:
+    name: Security Scan
+    uses: ./.github/workflows/security.yml
+
   release:
+    needs: security
     name: Release Container
     runs-on: ubuntu-latest
     permissions:
@@ -26,7 +35,7 @@ jobs:
           cache: true
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
           version: '3.x'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
