@@ -2,12 +2,16 @@
 name: PR Checks
 permissions:
   contents: read
+  security-events: write
 
 on:
   workflow_dispatch:
   pull_request:
 
 jobs:
+  security:
+    name: Security Scan
+    uses: ./.github/workflows/security.yml
   linting:
     name: Linting
     uses: ./.github/workflows/lint.yml

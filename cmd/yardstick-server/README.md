@@ -73,9 +73,10 @@ docker run -p 8080:8080 -e MCP_TRANSPORT=streamable-http -e PORT=8080 ghcr.io/st
 ```
 
 ## Tools
+
 ### `echo` Tool
 
-The server exposes a single tool called `echo` with the following specification:
+A deterministic echo tool for basic testing and validation. This tool also supports metadata echoing for testing metadata propagation through MCP implementations.
 
 **Input Schema:**
 ```json
@@ -92,12 +93,76 @@ The server exposes a single tool called `echo` with the following specification:
 }
 ```
 
-**Output:**
+**Output (StructuredContent):**
 ```json
 {
   "output": "input_string"
 }
 ```
+
+**Metadata Support:**
+The `echo` tool accepts and echoes back the optional `_meta` field from tool call requests. Any metadata provided in the request's `_meta` field will be returned in the response's `_meta` field, enabling validation that:
+- MCP clients correctly pass metadata in tool calls
+- Servers properly return metadata in responses
+- Proxies and routers preserve metadata throughout the request/response lifecycle
+- Metadata can be used for request tracking, debugging, and observability
+
+When metadata is present, it is also logged to the server's output for debugging purposes.
+
+**Example Request with Metadata:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "echo",
+    "arguments": {
+      "input": "test123"
+    },
+    "_meta": {
+      "progressToken": "task123",
+      "requestId": "req-456",
+      "clientInfo": "test-client-v1"
+    }
+  }
+}
+```
+
+**Example Response with Metadata:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"output\":\"test123\"}"
+      }
+    ],
+    "_meta": {
+      "progressToken": "task123",
+      "requestId": "req-456",
+      "clientInfo": "test-client-v1"
+    }
+  }
+}
+```
+
+## Metadata Field Support
+
+The `echo` tool supports the optional `_meta` field as specified in the [MCP specification (2025-11-25)](https://modelcontextprotocol.io). The `_meta` field allows clients and servers to attach additional metadata to their interactions without exposing it to the LLM.
+
+**Common use cases:**
+- **Request tracking**: Using `progressToken` for progress notifications
+- **Client context**: Passing client version, user information, or session data
+- **Debugging**: Including trace IDs, debug levels, or diagnostic information
+- **Testing**: Validating metadata propagation through complex MCP architectures
+
+**Standard Fields:**
+While the `_meta` field accepts any key-value pairs, the MCP specification defines some standard fields:
+- `progressToken`: An opaque token for associating progress notifications with requests
 
 ## Development
 

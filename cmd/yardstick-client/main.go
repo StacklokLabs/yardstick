@@ -15,6 +15,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const (
+	transportStdio          = "stdio"
+	transportSSE            = "sse"
+	transportStreamableHTTP = "streamable-http"
+
+	defaultAddress = "localhost"
+)
+
 // Config holds the client configuration
 type Config struct {
 	Transport string
@@ -45,11 +53,11 @@ func (c *Client) Connect(ctx context.Context) error {
 	var err error
 
 	switch c.config.Transport {
-	case "stdio":
+	case transportStdio:
 		transport, err = c.connectStdio()
-	case "sse":
+	case transportSSE:
 		transport, err = c.connectSSE()
-	case "streamable-http":
+	case transportStreamableHTTP:
 		transport, err = c.connectStreamableHTTP()
 	default:
 		return fmt.Errorf("unsupported transport type: %s", c.config.Transport)
@@ -184,8 +192,8 @@ func (c *Client) GetServerInfo(ctx context.Context) error {
 // parseConfig parses command line flags and environment variables
 func parseConfig() Config {
 	config := Config{
-		Transport: "stdio",
-		Address:   "localhost",
+		Transport: transportStdio,
+		Address:   defaultAddress,
 		Port:      8080,
 		Timeout:   30 * time.Second,
 	}
@@ -285,6 +293,6 @@ func main() {
 		}
 
 	default:
-		log.Fatalf("Unknown action: %s", action)
+		log.Fatalf("Unknown action: %s", strconv.Quote(action))
 	}
 }
