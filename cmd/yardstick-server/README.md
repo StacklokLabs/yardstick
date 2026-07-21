@@ -55,6 +55,23 @@ yardstick --transport sse --port 8080
 yardstick --transport streamable-http --port 8080
 ```
 
+### Fault Injection (`BACKEND_MODE`)
+
+The server's behavior is driven entirely by environment variables (no CLI flags), so it works uniformly through `thv run -e`, a Kubernetes `MCPServer` CRD's env section, or a plain pod spec. These apply identically across all three transports.
+
+**Env vars:**
+- `BACKEND_MODE`: `echo` (default), `barrier`, `hang`, or `crash`
+- `BARRIER_N`: arrivals required to release a barrier window - default: `2`
+- `HANG_AFTER_N`: non-initialize/non-ping call count at which the server hangs - default: `1`
+- `CRASH_AFTER_N`: non-initialize/non-ping call count at which the server exits(1) - default: `1`
+- `BARRIER_TIMEOUT_SECONDS`: safety timer that releases a barrier window early if it never fills - default: `10`
+
+**Modes:**
+- `echo` - normal operation, no fault injection; every call passes straight through.
+- `barrier` - every call other than `initialize`/`ping` blocks until `BARRIER_N` concurrent calls have arrived (or the safety timeout fires), useful for testing concurrent-request handling.
+- `hang` - the `HANG_AFTER_N`-th non-initialize/non-ping call blocks forever, simulating a wedged backend.
+- `crash` - the `CRASH_AFTER_N`-th non-initialize/non-ping call terminates the process immediately, simulating a backend crash.
+
 ### Running with Docker
 
 **Stdio Transport (default):**

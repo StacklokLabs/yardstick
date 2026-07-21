@@ -30,15 +30,33 @@ const (
 )
 
 const (
-	methodInitialize = "initialize"
-	methodPing       = "ping"
+	methodInitialize        = "initialize"
+	methodPing              = "ping"
+	methodDiscover          = "server/discover"
+	notificationInitialized = "notifications/initialized"
 
 	modeHang  = "hang"
 	modeCrash = "crash"
 )
 
+// isLifecycleMethod reports whether method is connection setup/handshake
+// traffic (rather than a real backend call) and so must never count toward
+// hangAfter/crashAfter or join a barrier window. Besides initialize/ping,
+// this covers server/discover (sent by Modern clients during connection,
+// per SEP-2575) and notifications/initialized (sent by Legacy clients right
+// after initialize, per the base MCP spec) - go-sdk routes both through the
+// same receiving middleware as any other method.
+func isLifecycleMethod(method string) bool {
+	switch method {
+	case methodInitialize, methodPing, methodDiscover, notificationInitialized:
+		return true
+	default:
+		return false
+	}
+}
+
 // counterState decides hang/crash behavior based on a running count of
-// non-initialize/non-ping method calls.
+// non-lifecycle method calls (see isLifecycleMethod).
 type counterState struct {
 	mu         sync.Mutex
 	mode       string // "echo" (default), "barrier", "hang", "crash"
@@ -48,9 +66,10 @@ type counterState struct {
 }
 
 // decide reports what a handler should do for the given method call.
-// initialize and ping never count toward hangAfter/crashAfter.
+// Lifecycle methods (see isLifecycleMethod) never count toward
+// hangAfter/crashAfter.
 func (c *counterState) decide(method string) decision {
-	if method == methodInitialize || method == methodPing {
+	if isLifecycleMethod(method) {
 		return decisionNormal
 	}
 

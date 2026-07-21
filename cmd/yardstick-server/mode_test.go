@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -28,10 +29,24 @@ func TestEnvIntOr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envSet {
 				t.Setenv(key, tt.envValue)
+			} else {
+				if orig, ok := os.LookupEnv(key); ok {
+					t.Cleanup(func() { os.Setenv(key, orig) })
+				}
+				os.Unsetenv(key)
 			}
 			result := envIntOr(key, tt.def)
 			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+func TestIsLifecycleMethod(t *testing.T) {
+	for _, method := range []string{methodInitialize, methodPing, methodDiscover, notificationInitialized} {
+		assert.True(t, isLifecycleMethod(method), "%s should be a lifecycle method", method)
+	}
+	for _, method := range []string{"tools/call", "tools/list", ""} {
+		assert.False(t, isLifecycleMethod(method), "%s should not be a lifecycle method", method)
 	}
 }
 
@@ -45,8 +60,12 @@ func TestCounterState_InitializeAndPingNeverCount(t *testing.T) {
 	}{
 		{"initialize in hang mode with hangAfter 1", modeHang, 1, 0, methodInitialize},
 		{"ping in hang mode with hangAfter 1", modeHang, 1, 0, methodPing},
+		{"discover in hang mode with hangAfter 1", modeHang, 1, 0, methodDiscover},
+		{"notifications/initialized in hang mode with hangAfter 1", modeHang, 1, 0, notificationInitialized},
 		{"initialize in crash mode with crashAfter 1", modeCrash, 0, 1, methodInitialize},
 		{"ping in crash mode with crashAfter 1", modeCrash, 0, 1, methodPing},
+		{"discover in crash mode with crashAfter 1", modeCrash, 0, 1, methodDiscover},
+		{"notifications/initialized in crash mode with crashAfter 1", modeCrash, 0, 1, notificationInitialized},
 		{"initialize in echo mode", "echo", 0, 0, methodInitialize},
 	}
 

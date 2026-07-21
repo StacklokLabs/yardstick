@@ -26,11 +26,21 @@ type EchoResponse struct {
 	Output string `json:"output"`
 }
 
+// modeBarrier is a BACKEND_MODE value handled entirely by the barrier
+// middleware branch; it has no counterState decision since every call
+// (other than initialize/ping) just waits at the barrier.
+const modeBarrier = "barrier"
+
 var alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 var transport string
 var port int
 var authHeader string
 var authValue string
+var backendMode string
+var barrierN int
+var hangAfterN int
+var crashAfterN int
+var barrierTimeout time.Duration
 
 func validateAlphanumeric(input string) bool {
 	return alphanumericRegex.MatchString(input)
@@ -94,6 +104,40 @@ func echoHandler(_ context.Context, req *mcp.CallToolRequest, params EchoRequest
 	return nil, response, nil
 }
 
+// newFaultMiddleware builds the receiving middleware that drives the
+// server's fault-injection behavior, uniformly across every transport.
+//
+// In "barrier" mode, every non-lifecycle call (see isLifecycleMethod) blocks
+// on br.join() before being handled. Otherwise cs.decide reports whether the
+// call should hang, crash, or proceed normally; in the default "echo" mode,
+// decide always reports decisionNormal, making this a pure passthrough.
+func newFaultMiddleware(mode string, cs *counterState, br *barrier) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if mode == modeBarrier {
+				if !isLifecycleMethod(method) {
+					select {
+					case <-br.join():
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+				}
+				return next(ctx, method, req)
+			}
+
+			switch cs.decide(method) { //nolint:exhaustive // decisionNormal falls through to the return below
+			case decisionHang:
+				time.Sleep(1<<63 - 1)
+				return nil, ctx.Err()
+			case decisionCrash:
+				os.Exit(1)
+				return nil, nil
+			}
+			return next(ctx, method, req)
+		}
+	}
+}
+
 func main() {
 	// Parse command line flags
 	parseConfig()
@@ -124,6 +168,10 @@ func main() {
 			"Also echoes back any _meta field from the request for testing metadata propagation.",
 		InputSchema: inputSchema,
 	}, echoHandler)
+
+	cs := &counterState{mode: backendMode, hangAfter: hangAfterN, crashAfter: crashAfterN}
+	br := &barrier{n: barrierN, timeout: barrierTimeout}
+	server.AddReceivingMiddleware(newFaultMiddleware(backendMode, cs, br))
 
 	ctx := context.Background()
 
@@ -200,4 +248,41 @@ func parseConfig() {
 
 	authHeader = os.Getenv("AUTH_HEADER")
 	authValue = os.Getenv("AUTH_VALUE")
+
+	backendMode = os.Getenv("BACKEND_MODE")
+	if backendMode == "" {
+		backendMode = "echo"
+	}
+	barrierN = envIntOr("BARRIER_N", 2)
+	hangAfterN = envIntOr("HANG_AFTER_N", 1)
+	crashAfterN = envIntOr("CRASH_AFTER_N", 1)
+	barrierTimeout = time.Duration(envIntOr("BARRIER_TIMEOUT_SECONDS", 10)) * time.Second
+
+	if err := validateFaultConfig(backendMode, barrierN, hangAfterN, crashAfterN); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
+}
+
+// validateFaultConfig checks that the fault-injection knob relevant to mode
+// has a usable value. counterState.decide and barrier.join both treat a
+// non-positive threshold as "never triggers"/"release immediately" rather
+// than erroring, so a misconfigured value (e.g. a typo'd 0) would otherwise
+// silently make the requested fault never fire.
+func validateFaultConfig(mode string, barrierN, hangAfterN, crashAfterN int) error {
+	switch mode {
+	case modeBarrier:
+		if barrierN < 1 {
+			return fmt.Errorf("BARRIER_N must be >= 1 (got %d): barrier mode requires at least one request per window", barrierN)
+		}
+	case modeHang:
+		if hangAfterN < 1 {
+			return fmt.Errorf("HANG_AFTER_N must be >= 1 (got %d): hang mode requires a positive call count to trigger on", hangAfterN)
+		}
+	case modeCrash:
+		if crashAfterN < 1 {
+			return fmt.Errorf("CRASH_AFTER_N must be >= 1 (got %d): crash mode requires a positive call count to trigger on", crashAfterN)
+		}
+	}
+	return nil
 }
