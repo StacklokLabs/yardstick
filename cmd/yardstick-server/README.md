@@ -37,6 +37,7 @@
 **Options:**
 - `--transport`: Transport type (`stdio`, `sse`, or `streamable-http`) - default: `stdio`
 - `--port`: Port number for HTTP-based transports - default: `8080`
+- `--stateless`: Run the `streamable-http` transport in stateless mode - default: `false` (ignored by `stdio` and `sse`)
 
 ### Examples
 
@@ -87,6 +88,11 @@ docker run -p 8080:8080 -e MCP_TRANSPORT=sse -e PORT=8080 ghcr.io/stackloklabs/y
 **Streamable HTTP Transport:**
 ```bash
 docker run -p 8080:8080 -e MCP_TRANSPORT=streamable-http -e PORT=8080 ghcr.io/stackloklabs/yardstick/server
+```
+
+**Streamable HTTP Transport (stateless):**
+```bash
+docker run -p 8080:8080 -e MCP_TRANSPORT=streamable-http -e PORT=8080 -e STATELESS=true ghcr.io/stackloklabs/yardstick/server
 ```
 
 ## Tools
@@ -247,6 +253,7 @@ Example performance test inputs:
 - JSON-RPC over HTTP
 - Supports CORS
 - Request/response pattern
+- Optional `--stateless` mode (see Command Line Options above)
 
 ## Error Handling
 

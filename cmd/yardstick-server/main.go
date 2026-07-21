@@ -34,6 +34,7 @@ const modeBarrier = "barrier"
 var alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 var transport string
 var port int
+var stateless bool
 var authHeader string
 var authValue string
 var backendMode string
@@ -209,7 +210,7 @@ func main() {
 
 		handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 			return server
-		}, nil)
+		}, &mcp.StreamableHTTPOptions{Stateless: stateless})
 
 		http.Handle("/mcp", authWrapper(handler))
 
@@ -234,6 +235,7 @@ func main() {
 func parseConfig() {
 	flag.StringVar(&transport, "transport", "stdio", "Transport type: stdio, sse, or streamable-http")
 	flag.IntVar(&port, "port", 8080, "Port number for HTTP-based transports")
+	flag.BoolVar(&stateless, "stateless", false, "Run the streamable-http transport in stateless mode (ignored by stdio and sse)")
 	flag.Parse()
 
 	// Use environment variables if provided, otherwise use flag values
@@ -243,6 +245,11 @@ func parseConfig() {
 	if p, ok := os.LookupEnv("PORT"); ok {
 		if intValue, err := strconv.Atoi(p); err == nil {
 			port = intValue
+		}
+	}
+	if s, ok := os.LookupEnv("STATELESS"); ok {
+		if boolValue, err := strconv.ParseBool(s); err == nil {
+			stateless = boolValue
 		}
 	}
 

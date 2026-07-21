@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"sync/atomic"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateAlphanumeric(t *testing.T) {
@@ -440,7 +443,22 @@ func TestFaultMiddleware_BarrierMode_ReleasesAfterNArrivals(t *testing.T) {
 	assert.EqualValues(t, 2, atomic.LoadInt32(&calls))
 }
 
+// withFreshFlagSet gives parseConfig a clean flag.CommandLine to register
+// against, restoring the original on cleanup. Every test that calls
+// parseConfig() must use this: flag.StringVar/IntVar/BoolVar panic with
+// "flag redefined" if the same flag name is registered twice on one
+// FlagSet, which happens the moment more than one such test (or a repeat
+// run of the same test, e.g. -count=2) executes in the same test binary.
+func withFreshFlagSet(t *testing.T) {
+	t.Helper()
+	origCommandLine := flag.CommandLine
+	t.Cleanup(func() { flag.CommandLine = origCommandLine })
+	flag.CommandLine = flag.NewFlagSet(t.Name(), flag.ContinueOnError)
+}
+
 func TestParseConfig_BackendModeEnvVars(t *testing.T) {
+	withFreshFlagSet(t)
+
 	origMode, origBarrierN, origHangAfter, origCrashAfter, origTimeout :=
 		backendMode, barrierN, hangAfterN, crashAfterN, barrierTimeout
 	defer func() {
@@ -496,6 +514,80 @@ func TestValidateFaultConfig(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestParseConfig_StatelessFlagAndEnv covers the one thing that's actually
+// new: STATELESS overrides the -stateless flag's default, the same way
+// PORT overrides -port elsewhere in this file. Flag-vs-env precedence
+// itself is stdlib flag package behavior, not this code's logic, so it's
+// not re-tested here.
+func TestParseConfig_StatelessFlagAndEnv(t *testing.T) {
+	origStateless := stateless
+	origArgs := os.Args
+	defer func() {
+		stateless = origStateless
+		os.Args = origArgs
+	}()
+
+	tests := []struct {
+		name     string
+		envSet   bool
+		env      string
+		expected bool
+	}{
+		{name: "default is false"},
+		{name: "env overrides default to true", envSet: true, env: "true", expected: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withFreshFlagSet(t)
+			os.Args = []string{"yardstick-server"}
+			if tt.envSet {
+				t.Setenv("STATELESS", tt.env)
+			} else {
+				os.Unsetenv("STATELESS")
+			}
+
+			parseConfig()
+
+			assert.Equal(t, tt.expected, stateless)
+		})
+	}
+}
+
+// TestStreamableHTTPStatelessMode confirms the Stateless option is actually
+// wired through to the SDK's streamable-http handler: a GET without an
+// Mcp-Session-Id header is a supported-but-incomplete request in stateful
+// mode (400), but an unsupported method in stateless mode (405), since
+// stateless mode ignores sessions entirely.
+func TestStreamableHTTPStatelessMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		stateless  bool
+		wantStatus int
+	}{
+		{name: "stateful (default) requires a session", stateless: false, wantStatus: http.StatusBadRequest},
+		{name: "stateless rejects GET entirely", stateless: true, wantStatus: http.StatusMethodNotAllowed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mcpServer := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+			handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+				return mcpServer
+			}, &mcp.StreamableHTTPOptions{Stateless: tt.stateless})
+
+			req, err := http.NewRequest(http.MethodGet, "/mcp", nil)
+			require.NoError(t, err)
+			req.Header.Set("Accept", "text/event-stream")
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
 	}
 }
