@@ -258,7 +258,7 @@ func parseConfig() {
 
 	backendMode = os.Getenv("BACKEND_MODE")
 	if backendMode == "" {
-		backendMode = "echo"
+		backendMode = modeEcho
 	}
 	barrierN = envIntOr("BARRIER_N", 2)
 	hangAfterN = envIntOr("HANG_AFTER_N", 1)

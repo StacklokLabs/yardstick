@@ -35,6 +35,7 @@ const (
 	methodDiscover          = "server/discover"
 	notificationInitialized = "notifications/initialized"
 
+	modeEcho  = "echo"
 	modeHang  = "hang"
 	modeCrash = "crash"
 )
@@ -59,7 +60,7 @@ func isLifecycleMethod(method string) bool {
 // non-lifecycle method calls (see isLifecycleMethod).
 type counterState struct {
 	mu         sync.Mutex
-	mode       string // "echo" (default), "barrier", "hang", "crash"
+	mode       string // modeEcho (default), modeBarrier, modeHang, modeCrash
 	hangAfter  int
 	crashAfter int
 	count      int

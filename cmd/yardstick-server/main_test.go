@@ -336,9 +336,9 @@ func noopHandler(_ context.Context, _ string, _ mcp.Request) (mcp.Result, error)
 func TestFaultMiddleware_EchoModeIsNoop(t *testing.T) {
 	// decide() always reports decisionNormal in echo mode, so every method
 	// (including initialize/ping) must pass straight through unchanged.
-	cs := &counterState{mode: "echo"}
+	cs := &counterState{mode: modeEcho}
 	br := &barrier{n: 2, timeout: time.Second}
-	mw := newFaultMiddleware("echo", cs, br)
+	mw := newFaultMiddleware(modeEcho, cs, br)
 
 	wantResult := &mcp.CallToolResult{}
 	handler := mw(func(_ context.Context, _ string, _ mcp.Request) (mcp.Result, error) {
@@ -494,7 +494,7 @@ func TestValidateFaultConfig(t *testing.T) {
 		crashAfterN int
 		wantErr     bool
 	}{
-		{name: "echo mode ignores all thresholds", mode: "echo", barrierN: 0, hangAfterN: 0, crashAfterN: 0},
+		{name: "echo mode ignores all thresholds", mode: modeEcho, barrierN: 0, hangAfterN: 0, crashAfterN: 0},
 		{name: "barrier mode valid", mode: modeBarrier, barrierN: 1, hangAfterN: 0, crashAfterN: 0},
 		{name: "barrier mode zero rejected", mode: modeBarrier, barrierN: 0, hangAfterN: 1, crashAfterN: 1, wantErr: true},
 		{name: "barrier mode negative rejected", mode: modeBarrier, barrierN: -1, hangAfterN: 1, crashAfterN: 1, wantErr: true},

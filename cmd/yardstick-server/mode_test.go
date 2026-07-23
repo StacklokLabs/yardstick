@@ -66,7 +66,7 @@ func TestCounterState_InitializeAndPingNeverCount(t *testing.T) {
 		{"ping in crash mode with crashAfter 1", modeCrash, 0, 1, methodPing},
 		{"discover in crash mode with crashAfter 1", modeCrash, 0, 1, methodDiscover},
 		{"notifications/initialized in crash mode with crashAfter 1", modeCrash, 0, 1, notificationInitialized},
-		{"initialize in echo mode", "echo", 0, 0, methodInitialize},
+		{"initialize in echo mode", modeEcho, 0, 0, methodInitialize},
 	}
 
 	for _, tt := range tests {
@@ -98,7 +98,7 @@ func TestCounterState_CrashMode(t *testing.T) {
 }
 
 func TestCounterState_EchoModeAlwaysNormal(t *testing.T) {
-	c := &counterState{mode: "echo"}
+	c := &counterState{mode: modeEcho}
 	for i := 0; i < 5; i++ {
 		assert.Equal(t, decisionNormal, c.decide("tools/call"))
 	}
