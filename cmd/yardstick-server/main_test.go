@@ -363,14 +363,30 @@ func TestFaultMiddleware_HangMode_BlocksNonInitPingCalls(t *testing.T) {
 		return noopHandler(ctx, method, req)
 	})
 
+	// The hang must hold while the request context is alive and unblock once
+	// it is cancelled: blocking forever on a cancelled request would leak the
+	// goroutine for the life of the process.
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
 	go func() {
-		_, _ = handler(context.Background(), "tools/call", nil)
+		_, err := handler(ctx, "tools/call", nil)
+		done <- err
 	}()
 
 	select {
 	case <-called:
 		t.Fatal("next must not be called once decide() reports decisionHang")
+	case err := <-done:
+		t.Fatalf("hang released before context cancellation: %v", err)
 	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("hang did not release after context cancellation")
 	}
 }
 
@@ -487,17 +503,22 @@ func TestParseConfig_BackendModeEnvVars(t *testing.T) {
 
 func TestValidateFaultConfig(t *testing.T) {
 	tests := []struct {
-		name        string
-		mode        string
-		barrierN    int
-		hangAfterN  int
-		crashAfterN int
-		wantErr     bool
+		name           string
+		mode           string
+		barrierN       int
+		hangAfterN     int
+		crashAfterN    int
+		barrierTimeout time.Duration
+		wantErr        bool
 	}{
 		{name: "echo mode ignores all thresholds", mode: modeEcho, barrierN: 0, hangAfterN: 0, crashAfterN: 0},
-		{name: "barrier mode valid", mode: modeBarrier, barrierN: 1, hangAfterN: 0, crashAfterN: 0},
-		{name: "barrier mode zero rejected", mode: modeBarrier, barrierN: 0, hangAfterN: 1, crashAfterN: 1, wantErr: true},
-		{name: "barrier mode negative rejected", mode: modeBarrier, barrierN: -1, hangAfterN: 1, crashAfterN: 1, wantErr: true},
+		{name: "unknown mode rejected", mode: "barier", barrierN: 2, hangAfterN: 1, crashAfterN: 1, wantErr: true},
+		{name: "empty mode rejected", mode: "", barrierN: 2, hangAfterN: 1, crashAfterN: 1, wantErr: true},
+		{name: "barrier mode valid", mode: modeBarrier, barrierN: 1, hangAfterN: 0, crashAfterN: 0, barrierTimeout: 10 * time.Second},
+		{name: "barrier mode zero rejected", mode: modeBarrier, barrierN: 0, hangAfterN: 1, crashAfterN: 1, barrierTimeout: 10 * time.Second, wantErr: true},
+		{name: "barrier mode negative rejected", mode: modeBarrier, barrierN: -1, hangAfterN: 1, crashAfterN: 1, barrierTimeout: 10 * time.Second, wantErr: true},
+		{name: "barrier mode zero timeout rejected", mode: modeBarrier, barrierN: 2, hangAfterN: 1, crashAfterN: 1, barrierTimeout: 0, wantErr: true},
+		{name: "barrier mode negative timeout rejected", mode: modeBarrier, barrierN: 2, hangAfterN: 1, crashAfterN: 1, barrierTimeout: -time.Second, wantErr: true},
 		{name: "hang mode valid", mode: modeHang, barrierN: 0, hangAfterN: 1, crashAfterN: 0},
 		{name: "hang mode zero rejected", mode: modeHang, barrierN: 1, hangAfterN: 0, crashAfterN: 1, wantErr: true},
 		{name: "hang mode negative rejected", mode: modeHang, barrierN: 1, hangAfterN: -1, crashAfterN: 1, wantErr: true},
@@ -508,7 +529,7 @@ func TestValidateFaultConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateFaultConfig(tt.mode, tt.barrierN, tt.hangAfterN, tt.crashAfterN)
+			err := validateFaultConfig(tt.mode, tt.barrierN, tt.hangAfterN, tt.crashAfterN, tt.barrierTimeout)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -556,6 +577,22 @@ func TestParseConfig_StatelessFlagAndEnv(t *testing.T) {
 			assert.Equal(t, tt.expected, stateless)
 		})
 	}
+}
+
+func TestFaultConfigDescription(t *testing.T) {
+	origMode, origBarrierN, origHangAfter, origCrashAfter, origTimeout :=
+		backendMode, barrierN, hangAfterN, crashAfterN, barrierTimeout
+	defer func() {
+		backendMode, barrierN, hangAfterN, crashAfterN, barrierTimeout =
+			origMode, origBarrierN, origHangAfter, origCrashAfter, origTimeout
+	}()
+
+	backendMode, barrierN, hangAfterN, crashAfterN, barrierTimeout = "echo", 2, 1, 1, 10*time.Second
+
+	assert.Equal(t, "echo (no fault injection)", faultConfigDescription(modeEcho))
+	assert.Equal(t, "barrier (BARRIER_N=2, BARRIER_TIMEOUT_SECONDS=10s)", faultConfigDescription(modeBarrier))
+	assert.Equal(t, "hang (HANG_AFTER_N=1)", faultConfigDescription(modeHang))
+	assert.Equal(t, "crash (CRASH_AFTER_N=1)", faultConfigDescription(modeCrash))
 }
 
 // TestStreamableHTTPStatelessMode confirms the Stateless option is actually

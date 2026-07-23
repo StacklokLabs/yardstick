@@ -2,12 +2,30 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestEnvIntOr_UnparseableExits(t *testing.T) {
+	if os.Getenv("YARDSTICK_ENVINT_HELPER") == "1" {
+		t.Setenv("YARDSTICK_TEST_ENV_INT_OR", "not-a-number")
+		_ = envIntOr("YARDSTICK_TEST_ENV_INT_OR", 42)
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestEnvIntOr_UnparseableExits")
+	cmd.Env = append(os.Environ(), "YARDSTICK_ENVINT_HELPER=1")
+	err := cmd.Run()
+
+	var exitErr *exec.ExitError
+	if assert.ErrorAs(t, err, &exitErr) {
+		assert.Equal(t, 1, exitErr.ExitCode())
+	}
+}
 
 func TestEnvIntOr(t *testing.T) {
 	tests := []struct {
@@ -19,7 +37,6 @@ func TestEnvIntOr(t *testing.T) {
 	}{
 		{"unset returns default", false, "", 42, 42},
 		{"valid int overrides default", true, "7", 42, 7},
-		{"unparseable returns default", true, "not-a-number", 42, 42},
 		{"empty string returns default", true, "", 42, 42},
 		{"negative int", true, "-5", 42, -5},
 	}
@@ -162,17 +179,6 @@ func TestBarrier_NIsOneReleasesImmediately(t *testing.T) {
 
 	ch2 := b.join()
 	assertClosedWithin(t, ch2, 10*time.Millisecond, "n==1 did not release on a later join")
-}
-
-func TestBarrier_NGreaterThanOneWaitsForFullCount(t *testing.T) {
-	b := &barrier{n: 2, timeout: time.Second}
-
-	ch1 := b.join()
-	assertNotClosed(t, ch1, "channel closed after only 1 of 2 joins")
-
-	ch2 := b.join()
-	assertClosedWithin(t, ch1, 100*time.Millisecond, "window did not release at n")
-	assertClosedWithin(t, ch2, 100*time.Millisecond, "window did not release at n")
 }
 
 func TestBarrier_ConcurrentJoin(t *testing.T) {

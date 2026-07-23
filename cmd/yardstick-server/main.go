@@ -26,11 +26,6 @@ type EchoResponse struct {
 	Output string `json:"output"`
 }
 
-// modeBarrier is a BACKEND_MODE value handled entirely by the barrier
-// middleware branch; it has no counterState decision since every call
-// (other than initialize/ping) just waits at the barrier.
-const modeBarrier = "barrier"
-
 var alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 var transport string
 var port int
@@ -112,6 +107,8 @@ func echoHandler(_ context.Context, req *mcp.CallToolRequest, params EchoRequest
 // on br.join() before being handled. Otherwise cs.decide reports whether the
 // call should hang, crash, or proceed normally; in the default "echo" mode,
 // decide always reports decisionNormal, making this a pure passthrough.
+// Hang blocks on the request context (until the client gives up) rather than
+// sleeping forever, so a cancelled request doesn't leak its goroutine.
 func newFaultMiddleware(mode string, cs *counterState, br *barrier) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
@@ -119,6 +116,7 @@ func newFaultMiddleware(mode string, cs *counterState, br *barrier) mcp.Middlewa
 				if !isLifecycleMethod(method) {
 					select {
 					case <-br.join():
+						log.Printf("fault mode barrier: releasing %q", method)
 					case <-ctx.Done():
 						return nil, ctx.Err()
 					}
@@ -128,11 +126,12 @@ func newFaultMiddleware(mode string, cs *counterState, br *barrier) mcp.Middlewa
 
 			switch cs.decide(method) { //nolint:exhaustive // decisionNormal falls through to the return below
 			case decisionHang:
-				time.Sleep(1<<63 - 1)
+				log.Printf("fault mode hang: blocking %q until the client gives up", method)
+				<-ctx.Done()
 				return nil, ctx.Err()
 			case decisionCrash:
+				fmt.Fprintf(os.Stderr, "fault mode crash: exiting with code 1 on %q\n", method)
 				os.Exit(1)
-				return nil, nil
 			}
 			return next(ctx, method, req)
 		}
@@ -174,6 +173,8 @@ func main() {
 	br := &barrier{n: barrierN, timeout: barrierTimeout}
 	server.AddReceivingMiddleware(newFaultMiddleware(backendMode, cs, br))
 
+	log.Printf("Fault-injection config: BACKEND_MODE=%s", faultConfigDescription(backendMode))
+
 	ctx := context.Background()
 
 	switch transport {
@@ -206,7 +207,7 @@ func main() {
 		log.Fatal(srv.ListenAndServe())
 
 	case "streamable-http":
-		log.Printf("Starting MCP server with streamable HTTP transport on port %d", port)
+		log.Printf("Starting MCP server with streamable HTTP transport on port %d (stateless=%t)", port, stateless)
 
 		handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 			return server
@@ -248,9 +249,12 @@ func parseConfig() {
 		}
 	}
 	if s, ok := os.LookupEnv("STATELESS"); ok {
-		if boolValue, err := strconv.ParseBool(s); err == nil {
-			stateless = boolValue
+		boolValue, err := strconv.ParseBool(s)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "STATELESS must be a boolean (e.g. true/false; got %q)\n", s)
+			os.Exit(1)
 		}
+		stateless = boolValue
 	}
 
 	authHeader = os.Getenv("AUTH_HEADER")
@@ -265,22 +269,27 @@ func parseConfig() {
 	crashAfterN = envIntOr("CRASH_AFTER_N", 1)
 	barrierTimeout = time.Duration(envIntOr("BARRIER_TIMEOUT_SECONDS", 10)) * time.Second
 
-	if err := validateFaultConfig(backendMode, barrierN, hangAfterN, crashAfterN); err != nil {
+	if err := validateFaultConfig(backendMode, barrierN, hangAfterN, crashAfterN, barrierTimeout); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
 }
 
-// validateFaultConfig checks that the fault-injection knob relevant to mode
-// has a usable value. counterState.decide and barrier.join both treat a
-// non-positive threshold as "never triggers"/"release immediately" rather
-// than erroring, so a misconfigured value (e.g. a typo'd 0) would otherwise
-// silently make the requested fault never fire.
-func validateFaultConfig(mode string, barrierN, hangAfterN, crashAfterN int) error {
+// validateFaultConfig checks that mode is a known BACKEND_MODE value and
+// that the knobs relevant to it have usable values. counterState.decide and
+// barrier.join both treat a non-positive threshold as "never
+// triggers"/"release immediately" and an unknown mode as "passthrough"
+// rather than erroring, so a misconfigured value (e.g. a typo'd mode name
+// or a 0) would otherwise silently make the requested fault never fire.
+func validateFaultConfig(mode string, barrierN, hangAfterN, crashAfterN int, barrierTimeout time.Duration) error {
 	switch mode {
+	case modeEcho:
 	case modeBarrier:
 		if barrierN < 1 {
 			return fmt.Errorf("BARRIER_N must be >= 1 (got %d): barrier mode requires at least one request per window", barrierN)
+		}
+		if barrierTimeout <= 0 {
+			return fmt.Errorf("BARRIER_TIMEOUT_SECONDS must be > 0 (got %v): a non-positive timeout disables the barrier", barrierTimeout)
 		}
 	case modeHang:
 		if hangAfterN < 1 {
@@ -290,6 +299,25 @@ func validateFaultConfig(mode string, barrierN, hangAfterN, crashAfterN int) err
 		if crashAfterN < 1 {
 			return fmt.Errorf("CRASH_AFTER_N must be >= 1 (got %d): crash mode requires a positive call count to trigger on", crashAfterN)
 		}
+	default:
+		return fmt.Errorf("unknown BACKEND_MODE %q: valid values are %s, %s, %s, %s",
+			mode, modeEcho, modeBarrier, modeHang, modeCrash)
 	}
 	return nil
+}
+
+// faultConfigDescription summarizes the active fault-injection config for
+// the startup log line, so an operator can confirm from the logs that the
+// mode they asked for is the one that got armed.
+func faultConfigDescription(mode string) string {
+	switch mode {
+	case modeBarrier:
+		return fmt.Sprintf("%s (BARRIER_N=%d, BARRIER_TIMEOUT_SECONDS=%v)", mode, barrierN, barrierTimeout)
+	case modeHang:
+		return fmt.Sprintf("%s (HANG_AFTER_N=%d)", mode, hangAfterN)
+	case modeCrash:
+		return fmt.Sprintf("%s (CRASH_AFTER_N=%d)", mode, crashAfterN)
+	default:
+		return fmt.Sprintf("%s (no fault injection)", modeEcho)
+	}
 }

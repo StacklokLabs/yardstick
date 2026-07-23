@@ -244,6 +244,15 @@ if docker ps | grep -q yardstick-hang-test; then
     else
         echo "✓ Hang mode call failed as expected (client -timeout bound the stuck request)"
     fi
+
+    # The hang is context-bound, so the log line proves the *injected* fault
+    # fired rather than the client dying for an unrelated reason.
+    if docker logs yardstick-hang-test 2>&1 | grep -q "fault mode hang"; then
+        echo "✓ Hang trigger was logged by the server"
+    else
+        echo "! Server logs missing the hang trigger line"
+        exit 1
+    fi
 else
     echo "✗ Hang mode container failed to start on port 8083"
     exit 1
@@ -283,6 +292,13 @@ if docker ps | grep -q yardstick-crash-test; then
         echo "✓ Crash mode container exited with code 1 as expected"
     else
         echo "! Crash mode container exited with code '$EXIT_CODE', expected 1"
+        exit 1
+    fi
+
+    if docker logs yardstick-crash-test 2>&1 | grep -q "fault mode crash"; then
+        echo "✓ Crash trigger was logged by the server"
+    else
+        echo "! Server logs missing the crash trigger line"
         exit 1
     fi
 else

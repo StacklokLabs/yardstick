@@ -176,6 +176,8 @@ func (c *Client) GetServerInfo(ctx context.Context) error {
 	// protocol's reserved _meta keys are in play), so only ping on Legacy
 	// sessions to confirm connectivity. The ListTools/ListResources calls
 	// below already prove the transport works for Modern sessions.
+	// NOTE: keep protocolVersionModern in sync with go-sdk's latest protocol
+	// version — the Ping-skip threshold must track the SDK's Modern gate.
 	if protocolVersion < protocolVersionModern {
 		if err := c.session.Ping(ctx, &mcp.PingParams{}); err != nil {
 			return fmt.Errorf("failed to ping server: %w", err)
