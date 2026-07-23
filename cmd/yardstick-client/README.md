@@ -59,7 +59,7 @@ HTTP POST requests for JSON-RPC communication:
 ## Actions
 
 ### info (default)
-Get server information including session ID, connection status, and available tools/resources count:
+Get server information including session ID, connection status, negotiated protocol version, and available tools/resources count:
 ```bash
 ./client -action=info
 ```

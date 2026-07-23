@@ -37,6 +37,7 @@
 **Options:**
 - `--transport`: Transport type (`stdio`, `sse`, or `streamable-http`) - default: `stdio`
 - `--port`: Port number for HTTP-based transports - default: `8080`
+- `--stateless`: Run the `streamable-http` transport in stateless mode - default: `false` (ignored by `stdio` and `sse`)
 
 ### Examples
 
@@ -55,6 +56,25 @@ yardstick --transport sse --port 8080
 yardstick --transport streamable-http --port 8080
 ```
 
+### Fault Injection (`BACKEND_MODE`)
+
+The server's behavior is driven entirely by environment variables (no CLI flags), so it works uniformly through `thv run -e`, a Kubernetes `MCPServer` CRD's env section, or a plain pod spec. These apply identically across all three transports.
+
+**Env vars:**
+- `BACKEND_MODE`: `echo` (default), `barrier`, `hang`, or `crash` (unknown values are rejected at startup)
+- `BARRIER_N`: arrivals required to release a barrier window - default: `2`
+- `HANG_AFTER_N`: non-lifecycle call count at which the server hangs - default: `1`
+- `CRASH_AFTER_N`: non-lifecycle call count at which the server exits(1) - default: `1`
+- `BARRIER_TIMEOUT_SECONDS`: safety timer that releases a barrier window early if it never fills - default: `10`
+
+Only the mode-relevant threshold is validated at startup, but a set-but-unparseable value for any of the above (or for `STATELESS`) fails fast, and lifecycle traffic (`initialize`, `ping`, `server/discover`, `notifications/initialized`) never counts toward `HANG_AFTER_N`/`CRASH_AFTER_N` or joins a barrier window — so the fault fires on the Nth *real* backend call, not during connection setup. The active mode and thresholds are logged at startup, and a barrier release, hang, or crash writes one line to the server's output when it fires, so an injected fault is distinguishable from a real wedge in `docker logs`.
+
+**Modes:**
+- `echo` - normal operation, no fault injection; every call passes straight through.
+- `barrier` - every call other than `initialize`/`ping` blocks until `BARRIER_N` concurrent calls have arrived (or the safety timeout fires), useful for testing concurrent-request handling. `BARRIER_N=1` degenerates to a passthrough (every window is complete on arrival).
+- `hang` - the `HANG_AFTER_N`-th non-initialize/non-ping call blocks until the client gives up, simulating a wedged backend.
+- `crash` - the `CRASH_AFTER_N`-th non-initialize/non-ping call terminates the process immediately, simulating a backend crash.
+
 ### Running with Docker
 
 **Stdio Transport (default):**
@@ -70,6 +90,11 @@ docker run -p 8080:8080 -e MCP_TRANSPORT=sse -e PORT=8080 ghcr.io/stackloklabs/y
 **Streamable HTTP Transport:**
 ```bash
 docker run -p 8080:8080 -e MCP_TRANSPORT=streamable-http -e PORT=8080 ghcr.io/stackloklabs/yardstick/server
+```
+
+**Streamable HTTP Transport (stateless):**
+```bash
+docker run -p 8080:8080 -e MCP_TRANSPORT=streamable-http -e PORT=8080 -e STATELESS=true ghcr.io/stackloklabs/yardstick/server
 ```
 
 ## Tools
@@ -230,6 +255,7 @@ Example performance test inputs:
 - JSON-RPC over HTTP
 - Supports CORS
 - Request/response pattern
+- Optional `--stateless` mode (see Command Line Options above)
 
 ## Error Handling
 

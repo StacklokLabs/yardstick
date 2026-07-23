@@ -224,6 +224,11 @@ func TestClient_IntegrationSSE(t *testing.T) {
 	assert.NoError(t, err)
 	defer client.Close()
 
+	// This mock negotiates the Modern protocol (2026-07-28), under which the
+	// server rejects Ping outright. GetServerInfo must skip the Ping call and
+	// still succeed here.
+	require.Equal(t, "2026-07-28", client.session.InitializeResult().ProtocolVersion)
+
 	// Test getting server info
 	err = client.GetServerInfo(ctx)
 	assert.NoError(t, err)
@@ -259,6 +264,10 @@ func TestClient_IntegrationStreamableHTTP(t *testing.T) {
 	err = client.Connect(ctx)
 	assert.NoError(t, err)
 	defer client.Close()
+
+	// This mock negotiates the Legacy protocol (2025-11-25), under which
+	// GetServerInfo still uses Ping to confirm connectivity.
+	require.Equal(t, "2025-11-25", client.session.InitializeResult().ProtocolVersion)
 
 	// Test getting server info
 	err = client.GetServerInfo(ctx)

@@ -21,6 +21,12 @@ const (
 	transportStreamableHTTP = "streamable-http"
 
 	defaultAddress = "localhost"
+
+	// protocolVersionModern is the MCP protocol version that introduced
+	// stricter session semantics under which the server rejects Ping.
+	// Version strings are ISO-date-formatted, so lexicographic comparison
+	// matches chronological order.
+	protocolVersionModern = "2026-07-28"
 )
 
 // Config holds the client configuration
@@ -164,15 +170,24 @@ func (c *Client) ListResources(ctx context.Context) error {
 
 // GetServerInfo gets information about the server
 func (c *Client) GetServerInfo(ctx context.Context) error {
-	// Try to ping the server to confirm connection
-	err := c.session.Ping(ctx, &mcp.PingParams{})
-	if err != nil {
-		return fmt.Errorf("failed to ping server: %w", err)
+	protocolVersion := c.session.InitializeResult().ProtocolVersion
+
+	// Modern sessions reject Ping outright (go-sdk rejects it once the new
+	// protocol's reserved _meta keys are in play), so only ping on Legacy
+	// sessions to confirm connectivity. The ListTools/ListResources calls
+	// below already prove the transport works for Modern sessions.
+	// NOTE: keep protocolVersionModern in sync with go-sdk's latest protocol
+	// version — the Ping-skip threshold must track the SDK's Modern gate.
+	if protocolVersion < protocolVersionModern {
+		if err := c.session.Ping(ctx, &mcp.PingParams{}); err != nil {
+			return fmt.Errorf("failed to ping server: %w", err)
+		}
 	}
 
 	fmt.Printf("Server Info:\n")
 	fmt.Printf("  Session ID: %s\n", c.session.ID())
 	fmt.Printf("  Connection: Active\n")
+	fmt.Printf("  Protocol Version: %s\n", protocolVersion)
 
 	// Try to get basic server capabilities by listing tools
 	tools, err := c.session.ListTools(ctx, &mcp.ListToolsParams{})
