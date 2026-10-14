@@ -192,6 +192,13 @@ func createMockMCPServer(_ *testing.T, transport string) *httptest.Server {
 			return server
 		}, nil)
 		mux.Handle("/mcp", handler)
+	case "streamable-http-stateless":
+		// Stateless handlers serve per-request metadata, so they negotiate
+		// the Modern protocol (2026-07-28).
+		handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+			return server
+		}, &mcp.StreamableHTTPOptions{Stateless: true})
+		mux.Handle("/mcp", handler)
 	}
 
 	return httptest.NewServer(mux)
@@ -267,6 +274,47 @@ func TestClient_IntegrationStreamableHTTP(t *testing.T) {
 	// This mock negotiates the Legacy protocol (2025-11-25), under which
 	// GetServerInfo still uses Ping to confirm connectivity.
 	require.Equal(t, "2025-11-25", client.session.InitializeResult().ProtocolVersion)
+
+	// Test getting server info
+	err = client.GetServerInfo(ctx)
+	assert.NoError(t, err)
+
+	// Test listing tools
+	err = client.ListTools(ctx)
+	assert.NoError(t, err)
+}
+
+func TestClient_IntegrationStreamableHTTPStateless(t *testing.T) {
+	// Create mock server
+	mockServer := createMockMCPServer(t, "streamable-http-stateless")
+	defer mockServer.Close()
+
+	// Extract host and port from mock server URL
+	url := strings.TrimPrefix(mockServer.URL, "http://")
+	parts := strings.Split(url, ":")
+	host := parts[0]
+	port, err := strconv.Atoi(parts[1])
+	require.NoError(t, err)
+
+	client := NewClient(Config{
+		Transport: "streamable-http",
+		Address:   host,
+		Port:      port,
+		Timeout:   5 * time.Second,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Test connection
+	err = client.Connect(ctx)
+	assert.NoError(t, err)
+	defer client.Close()
+
+	// This mock negotiates the Modern protocol (2026-07-28), under which the
+	// server rejects Ping outright. GetServerInfo must skip the Ping call and
+	// still succeed here.
+	require.Equal(t, protocolVersionModern, client.session.InitializeResult().ProtocolVersion)
 
 	// Test getting server info
 	err = client.GetServerInfo(ctx)
